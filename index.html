@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0B1120">
+<title>Trình Chiếu Từ Xa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- ============ TRANG CHỦ (laptop) ============ -->
+<main id="home" class="view" hidden>
+  <div class="home-wrap">
+    <header class="home-head">
+      <p class="eyebrow">TRÌNH CHIẾU TỪ XA</p>
+      <h1>Chiếu slide trên laptop, điều khiển bằng điện thoại</h1>
+      <p class="lede">Chọn bộ slide dạng PDF và (tuỳ chọn) file PowerPoint để lấy ghi chú. File chỉ được đọc trên máy này, không tải lên đâu cả.</p>
+    </header>
+
+    <div id="drop" class="drop" tabindex="0">
+      <p class="drop-title">Kéo thả file vào đây</p>
+      <p class="drop-sub">hoặc chọn từng file bên dưới</p>
+    </div>
+
+    <div class="pickers">
+      <label class="picker" for="pdfInput">
+        <span class="picker-k">BẮT BUỘC</span>
+        <b>File PDF của bộ slide</b>
+        <span class="picker-v" id="pdfName">Chưa chọn</span>
+        <input id="pdfInput" type="file" accept="application/pdf,.pdf">
+      </label>
+      <label class="picker" for="notesInput">
+        <span class="picker-k">TUỲ CHỌN</span>
+        <b>Ghi chú: file .pptx hoặc .txt</b>
+        <span class="picker-v" id="notesName">Chưa chọn</span>
+        <input id="notesInput" type="file" accept=".pptx,.txt,.md,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain">
+      </label>
+    </div>
+
+    <p id="homeMsg" class="msg" hidden></p>
+    <button id="startBtn" class="btn-primary" type="button" disabled>Bắt đầu trình chiếu</button>
+
+    <details class="help">
+      <summary>Chuẩn bị file thế nào?</summary>
+      <ul>
+        <li><b>PowerPoint:</b> File › Export › PDF, và giữ nguyên file .pptx để lấy ghi chú.</li>
+        <li><b>Google Slides:</b> Tệp › Tải xuống › PDF và Microsoft PowerPoint (.pptx).</li>
+        <li><b>Keynote:</b> File › Export To › PDF và PowerPoint.</li>
+        <li><b>Ghi chú dạng .txt:</b> mỗi slide một đoạn, ngăn cách bằng một dòng chỉ có <code>---</code>.</li>
+      </ul>
+    </details>
+    <p class="home-foot">Điện thoại? <a href="?join=" id="joinLink">Nhập mã kết nối</a> · Chưa có file? <button type="button" class="link-btn" id="demoBtn">Xem thử với slide mẫu</button></p>
+  </div>
+</main>
+
+<!-- ============ MÀN CHIẾU (laptop) ============ -->
+<div id="screen" class="view" hidden>
+  <div id="stage"><canvas id="stageCanvas"></canvas></div>
+  <div id="blank" hidden></div>
+  <div id="laser" hidden></div>
+
+  <div id="qrOverlay" class="qr-overlay" hidden>
+    <div class="qr-card">
+      <p class="eyebrow">QUÉT BẰNG ĐIỆN THOẠI</p>
+      <div id="qrBox" class="qr-box"></div>
+      <p class="qr-code-label">hoặc mở trang này trên điện thoại và nhập mã</p>
+      <p id="qrCode" class="qr-code">······</p>
+      <p id="qrStatus" class="qr-status">Đang tạo kết nối…</p>
+      <button id="qrClose" class="btn-ghost" type="button">Ẩn (phím Q)</button>
+    </div>
+  </div>
+
+  <div id="screenBar" class="screen-bar">
+    <button class="pill" id="sPrev" type="button" aria-label="Slide trước">‹</button>
+    <span class="pill-count" id="sCount">0 / 0</span>
+    <button class="pill" id="sNext" type="button" aria-label="Slide sau">›</button>
+    <span class="sep"></span>
+    <button class="pill" id="sQr" type="button">Mã QR</button>
+    <button class="pill" id="sFull" type="button">Toàn màn hình</button>
+    <button class="pill" id="sNotes" type="button">Tải ghi chú</button>
+    <span class="pill-status"><span class="dot" id="sDot"></span><span id="sConn">0 điện thoại</span></span>
+    <button class="pill" id="sExit" type="button">Thoát</button>
+  </div>
+</div>
+
+<!-- ============ NHẬP MÃ (điện thoại) ============ -->
+<main id="join" class="view" hidden>
+  <form id="joinForm" class="join-wrap">
+    <p class="eyebrow">ĐIỀU KHIỂN TỪ XA</p>
+    <h1>Nhập mã trên màn chiếu</h1>
+    <input id="joinCode" inputmode="text" autocomplete="off" autocapitalize="characters" maxlength="6" placeholder="VD: K7M2QX" aria-label="Mã kết nối">
+    <button class="btn-primary" type="submit">Kết nối</button>
+    <p class="msg" id="joinMsg" hidden></p>
+  </form>
+</main>
+
+<!-- ============ ĐIỀU KHIỂN (điện thoại) ============ -->
+<div id="remote" class="view" hidden>
+  <header class="r-top">
+    <span class="r-count" id="rCount">– / –</span>
+    <span class="r-mid"><span class="dot" id="rDot"></span><span id="rStatus">Đang kết nối…</span></span>
+    <span class="r-clock" id="rClock">00:00</span>
+  </header>
+
+  <div class="r-panels">
+    <!-- Tab 1: Điều khiển -->
+    <section class="panel" id="tab-control" data-tab="control">
+      <div class="previews">
+        <figure class="pv"><figcaption>ĐANG CHIẾU</figcaption><div class="thumb" id="pvCur"></div></figure>
+        <figure class="pv pv-next"><figcaption>TIẾP THEO</figcaption><div class="thumb" id="pvNext"></div></figure>
+      </div>
+      <div class="notes-bar">
+        <span class="label">GHI CHÚ</span>
+        <span class="slide-timer" id="slideTime" title="Thời gian ở slide này">0:00</span>
+      </div>
+      <div id="notes" class="notes"></div>
+      <p class="hint">Vuốt trái/phải trên ghi chú để chuyển slide</p>
+    </section>
+
+    <!-- Tab 2: Danh sách slide -->
+    <section class="panel" id="tab-slides" data-tab="slides" hidden>
+      <div class="panel-head"><h2>Tất cả slide</h2><span class="muted" id="gridInfo"></span></div>
+      <div class="grid" id="slideGrid"></div>
+    </section>
+
+    <!-- Tab 3: Ghi chú -->
+    <section class="panel" id="tab-notes" data-tab="notes" hidden>
+      <div class="panel-head"><h2>Ghi chú</h2>
+        <div class="seg" role="group" aria-label="Chế độ ghi chú">
+          <button type="button" class="seg-btn on" id="nEditMode">Sửa slide này</button>
+          <button type="button" class="seg-btn" id="nAllMode">Xem tất cả</button>
+        </div>
+      </div>
+      <div id="noteEditWrap" class="note-edit">
+        <label for="noteEditor" class="muted" id="noteEditLabel">Slide 1</label>
+        <textarea id="noteEditor" rows="10" placeholder="Gõ ghi chú cho slide này…"></textarea>
+        <div class="row">
+          <button type="button" class="btn-secondary" id="noteRevert">Hoàn tác</button>
+          <button type="button" class="btn-primary" id="noteSave">Lưu ghi chú</button>
+        </div>
+        <p class="muted small">Ghi chú lưu trên laptop trong buổi chiếu. Bấm “Tải ghi chú” trên laptop để giữ lại thành file .txt.</p>
+      </div>
+      <div id="noteAll" class="note-all" hidden></div>
+      <button type="button" class="btn-secondary wide" id="noteCopy">Sao chép tất cả ghi chú</button>
+    </section>
+
+    <!-- Tab 4: Hẹn giờ -->
+    <section class="panel" id="tab-timer" data-tab="timer" hidden>
+      <div class="timer-hero">
+        <p class="label" id="tMode">ĐÃ NÓI</p>
+        <p class="timer-big" id="tBig">00:00</p>
+        <p class="timer-sub" id="tSub">Chưa bắt đầu</p>
+        <div class="progress" aria-hidden="true"><div class="bar-time" id="barTime"></div><div class="bar-slide" id="barSlide"></div></div>
+        <p class="pace" id="tPace"></p>
+      </div>
+      <div class="row">
+        <button type="button" class="btn-primary" id="tStart">Bắt đầu</button>
+        <button type="button" class="btn-secondary" id="tReset">Đặt lại</button>
+      </div>
+      <div class="field">
+        <label for="tTarget">Thời lượng buổi nói (phút)</label>
+        <div class="row">
+          <input id="tTarget" type="number" min="0" max="600" step="5" inputmode="numeric" value="45">
+          <div class="chips"><button type="button" class="chip" data-min="15">15</button><button type="button" class="chip" data-min="30">30</button><button type="button" class="chip" data-min="45">45</button><button type="button" class="chip" data-min="60">60</button></div>
+        </div>
+        <p class="muted small">Đặt 0 để chỉ đếm giờ. Điện thoại rung khi còn 5 phút và khi hết giờ (nếu máy hỗ trợ).</p>
+      </div>
+      <div class="panel-head"><h3>Thời gian từng slide</h3></div>
+      <div class="table-wrap"><table class="times"><thead><tr><th>Slide</th><th>Thời gian</th></tr></thead><tbody id="timesBody"></tbody></table></div>
+    </section>
+
+    <!-- Tab 5: Công cụ -->
+    <section class="panel" id="tab-tools" data-tab="tools" hidden>
+      <div class="panel-head"><h2>Bút laser</h2><span class="muted small">Giữ và di ngón tay</span></div>
+      <div id="laserPad" class="laser-pad"><span>Chạm và kéo để hiện chấm đỏ trên màn chiếu</span></div>
+
+      <div class="panel-head"><h2>Màn chiếu</h2></div>
+      <div class="tool-grid">
+        <button type="button" class="tool" id="toolBlack" aria-pressed="false"><b>Màn đen</b><span>Che slide, giữ khán giả tập trung</span></button>
+        <button type="button" class="tool" id="toolWhite" aria-pressed="false"><b>Màn trắng</b><span>Dùng khi viết bảng</span></button>
+        <button type="button" class="tool" id="toolQr" aria-pressed="false"><b>Hiện mã QR</b><span>Cho điện thoại khác kết nối</span></button>
+        <button type="button" class="tool" id="toolFirst"><b>Về slide đầu</b><span>Slide 1</span></button>
+        <button type="button" class="tool" id="toolLast"><b>Đến slide cuối</b><span id="toolLastSub">–</span></button>
+        <button type="button" class="tool" id="toolFull"><b>Toàn màn hình</b><span>Trên laptop (cần bấm trên laptop nếu trình duyệt chặn)</span></button>
+      </div>
+
+      <div class="panel-head"><h2>Cài đặt</h2></div>
+      <div class="settings">
+        <div class="set-row"><span>Cỡ chữ ghi chú</span><span class="stepper"><button type="button" id="fontDown" aria-label="Chữ nhỏ hơn">A−</button><output id="fontVal">20</output><button type="button" id="fontUp" aria-label="Chữ to hơn">A+</button></span></div>
+        <label class="set-row" for="optLight"><span>Nền sáng cho ghi chú</span><input type="checkbox" id="optLight"></label>
+        <label class="set-row" for="optVibrate"><span>Rung khi chuyển slide</span><input type="checkbox" id="optVibrate"></label>
+        <label class="set-row" for="optSwipe"><span>Vuốt để chuyển slide</span><input type="checkbox" id="optSwipe" checked></label>
+        <label class="set-row" for="optAwake"><span>Giữ màn hình luôn sáng</span><input type="checkbox" id="optAwake" checked></label>
+        <div class="set-row"><span>Mã kết nối</span><code id="setCode">–</code></div>
+        <button type="button" class="btn-secondary wide" id="disconnectBtn">Ngắt kết nối</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="r-controls" id="rControls">
+    <button class="big prev" id="rPrev" type="button">‹ Trước</button>
+    <button class="big next" id="rNext" type="button">Sau ›</button>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="Chức năng">
+    <button role="tab" class="tab on" data-go="control" aria-selected="true"><span class="ti">▶</span>Điều khiển</button>
+    <button role="tab" class="tab" data-go="slides" aria-selected="false"><span class="ti">▦</span>Slide</button>
+    <button role="tab" class="tab" data-go="notes" aria-selected="false"><span class="ti">✎</span>Ghi chú</button>
+    <button role="tab" class="tab" data-go="timer" aria-selected="false"><span class="ti">◷</span>Hẹn giờ</button>
+    <button role="tab" class="tab" data-go="tools" aria-selected="false"><span class="ti">✦</span>Công cụ</button>
+  </nav>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="notes.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
