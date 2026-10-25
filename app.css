@@ -52,16 +52,31 @@ code { font-family: var(--font-mono); font-size: .92em; }
 .home-head { display: flex; flex-direction: column; gap: 10px; }
 .home-head h1 { margin: 0; font-size: clamp(28px, 5vw, 44px); line-height: 1.15; font-weight: 800; text-wrap: balance; }
 .lede { margin: 0; color: var(--muted); max-width: 60ch; }
-.drop { border: 2px dashed var(--line); border-radius: 16px; padding: 28px 16px; text-align: center; background: var(--panel); }
+.drop { position: relative; display: block; border: 2px dashed var(--line); border-radius: 16px; padding: 36px 16px; text-align: center; background: var(--panel); cursor: pointer; transition: border-color .15s, background .15s; }
+.drop:hover, .drop:focus-within { border-color: var(--accent); }
 .drop.over { border-color: var(--accent); background: var(--panel-2); }
-.drop-title { margin: 0; font-weight: 700; font-size: 18px; }
-.drop-sub { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.drop.got { animation: got .6s ease-out; }
+@keyframes got { 0% { box-shadow: 0 0 0 0 rgba(242,153,74,.55); } 100% { box-shadow: 0 0 0 18px rgba(242,153,74,0); } }
+.drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.drop-title { margin: 0; font-weight: 700; font-size: 20px; }
+.drop-sub { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+body.dragging #home .drop { border-color: var(--accent); background: var(--panel-2); }
 .pickers { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-.picker { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 16px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); cursor: pointer; min-width: 0; }
-.picker:hover, .picker:focus-within { border-color: var(--accent); }
-.picker input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.picker { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); min-width: 0; }
+.picker b { overflow-wrap: anywhere; color: var(--muted); font-weight: 600; }
+.picker.set { border-color: var(--ok); }
+.picker.set b { color: var(--fg); }
+.picker.set .picker-k::before { content: "✓ "; color: var(--ok); }
 .picker-k { font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.5px; color: var(--muted); }
-.picker-v { color: var(--accent); font-size: 14px; overflow-wrap: anywhere; }
+.picker-v { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.picker.set .picker-v { color: var(--accent); }
+.msg.ok { background: #143027; border-color: #2B5C49; color: #CDEFE0; }
+#clearBtn { align-self: flex-start; padding: 8px 14px; font-size: 14px; }
+.offscreen { position: fixed; left: -20000px; top: 0; pointer-events: none; }
+#pptxStage { position: relative; }
+#pptxStage .pptx-preview-wrapper { background: transparent !important; overflow: hidden !important; }
+.snap-host { position: relative; overflow: hidden; }
+.snap { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; }
 #startBtn { font-size: 18px; padding: 16px; }
 .help { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; }
 .help summary { cursor: pointer; font-weight: 600; }

@@ -1,6 +1,6 @@
 # Trình Chiếu Từ Xa
 
-Web tĩnh để **chiếu slide trên laptop và điều khiển bằng điện thoại**. Dùng được cho mọi bộ slide xuất ra PDF (PowerPoint, Google Slides, Keynote, Canva…). Ghi chú người thuyết trình được lấy tự động từ file `.pptx`.
+Web tĩnh để **chiếu slide trên laptop và điều khiển bằng điện thoại**. Kéo thả file PowerPoint (`.pptx`) là chiếu được ngay, ghi chú người thuyết trình được lấy tự động. Muốn hiển thị chính xác tuyệt đối thì thêm bản PDF.
 
 - Laptop: hiện slide toàn màn hình và một mã QR.
 - Điện thoại: quét mã là kết nối, có 5 tab:
@@ -47,16 +47,25 @@ Sau đó bật Pages như bước 3.
 
 ## 2. Chuẩn bị bộ slide
 
-Cần **một file PDF** để hiển thị. Ghi chú là tuỳ chọn:
+Có hai cách:
 
-| Phần mềm | PDF | Ghi chú |
+- **Nhanh nhất: chỉ cần file PowerPoint (.pptx).**
+  - Kéo thả file vào trang. Web tự hiển thị slide và lấy ghi chú.
+  - Phông chữ, hiệu ứng chuyển cảnh và biểu đồ có thể khác đôi chút so với PowerPoint.
+- **Chính xác nhất: file PDF + file .pptx của cùng bộ slide.**
+  - Slide hiển thị từ PDF, đúng như bản gốc.
+  - Ghi chú lấy từ .pptx.
+
+| Phần mềm | PDF | PowerPoint |
 |---|---|---|
 | PowerPoint | File › Export › PDF | Dùng luôn file `.pptx` |
 | Google Slides | Tệp › Tải xuống › PDF | Tệp › Tải xuống › Microsoft PowerPoint (.pptx) |
 | Keynote | File › Export To › PDF | File › Export To › PowerPoint |
 | Bộ slide trên Claude | Share › Export › PDF | Share › Export › PowerPoint |
 
-Không có file PowerPoint? Viết ghi chú vào file `.txt`, mỗi slide một đoạn, ngăn cách bằng một dòng chỉ có `---`:
+File `.ppt` (định dạng cũ) và `.key` chưa đọc được: hãy lưu lại thành `.pptx` hoặc xuất PDF.
+
+Ghi chú cũng có thể là file `.txt`, mỗi slide một đoạn, ngăn cách bằng một dòng chỉ có `---`:
 
 ```
 Ghi chú slide 1
@@ -67,12 +76,12 @@ Ghi chú slide 2
 ```
 
 Lưu ý:
-- Slide ẩn trong PowerPoint sẽ tự động bị bỏ qua, để ghi chú khớp với PDF.
+- Slide ẩn trong PowerPoint được bỏ qua, để ghi chú khớp với slide đang chiếu.
 - Nếu số slide của PowerPoint và số trang PDF khác nhau, web sẽ cảnh báo.
 
 ## 3. Trình chiếu
 
-1. **Laptop:** mở địa chỉ GitHub Pages, chọn (hoặc kéo thả) file PDF và file ghi chú, bấm **Bắt đầu trình chiếu**.
+1. **Laptop:** mở địa chỉ GitHub Pages, kéo thả file `.pptx` (và PDF nếu có) vào bất kỳ đâu trên trang, rồi bấm **Bắt đầu trình chiếu**.
 2. **Điện thoại:** quét mã QR trên màn chiếu bằng camera. Hoặc mở cùng địa chỉ, bấm “Nhập mã kết nối” và gõ mã 6 ký tự.
 3. Khi điện thoại kết nối xong, mã QR tự ẩn. Bấm **Toàn màn hình** (hoặc phím `F`) trên laptop.
 
@@ -101,7 +110,8 @@ Ghi chú sửa trên điện thoại được giữ trên laptop trong buổi ch
 ## Thành phần
 
 - [pdf.js](https://mozilla.github.io/pdf.js/) để hiển thị PDF.
-- [JSZip](https://stuk.github.io/jszip/) để đọc file `.pptx`.
+- [JSZip](https://stuk.github.io/jszip/) để đọc ghi chú trong file `.pptx`.
+- [pptx-preview](https://www.npmjs.com/package/pptx-preview) để hiển thị trực tiếp file `.pptx`. Chỉ tải khi cần, miễn phí sử dụng.
 - [PeerJS](https://peerjs.com/) để kết nối WebRTC.
 - [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) để tạo mã QR.
 

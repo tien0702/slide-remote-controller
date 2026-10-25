@@ -59,8 +59,10 @@
 
   /**
    * zip: đối tượng JSZip đã nạp. parse: (xmlString) => Document.
-   * Trả về { notes: string[], hidden: number } theo thứ tự trình chiếu, bỏ slide ẩn
-   * (PDF xuất từ PowerPoint mặc định không chứa slide ẩn).
+   * Trả về { notes, hidden, all, size }:
+   *  - notes: ghi chú các slide hiện (PDF xuất từ PowerPoint mặc định bỏ slide ẩn),
+   *  - all: mọi slide theo thứ tự, kèm cờ hidden,
+   *  - size: kích thước slide (EMU) để giữ đúng tỉ lệ khi hiển thị.
    */
   async function notesFromPptxZip(zip, parse) {
     const read = async p => { const f = zip.file(p); return f ? f.async('string') : null; };
@@ -70,16 +72,19 @@
     const pres = parse(presXml);
     const presRels = relsOf(parse(presRelsXml));
     const notes = [];
+    const all = [];
     let hidden = 0;
+    const sz = byLocal(pres, 'sldSz')[0];
+    const size = sz ? { cx: +sz.getAttribute('cx') || 12192000, cy: +sz.getAttribute('cy') || 6858000 } : { cx: 12192000, cy: 6858000 };
     for (const sld of byLocal(pres, 'sldId')) {
       const rid = sld.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id') || sld.getAttribute('r:id');
       const rel = presRels[rid];
       if (!rel) continue;
       const slidePath = resolvePath('ppt/', rel.target);
       const slideXml = await read(slidePath);
-      if (!slideXml) { notes.push(''); continue; }
+      if (!slideXml) { notes.push(''); all.push({ hidden: false, notes: '' }); continue; }
       const slideDoc = parse(slideXml);
-      if (slideDoc.documentElement.getAttribute('show') === '0') { hidden++; continue; }
+      const isHidden = slideDoc.documentElement.getAttribute('show') === '0';
       const relsXml = await read(dirOf(slidePath) + '_rels/' + baseOf(slidePath) + '.rels');
       let text = '';
       if (relsXml) {
@@ -90,9 +95,11 @@
           if (notesXml) text = notesFromNotesXml(parse(notesXml));
         }
       }
-      notes.push(text);
+      all.push({ hidden: isHidden, notes: text });
+      if (isHidden) hidden++;
+      else notes.push(text);
     }
-    return { notes, hidden };
+    return { notes, hidden, all, size };
   }
 
   /* .txt / .md: các slide ngăn cách bằng một dòng chỉ có --- */

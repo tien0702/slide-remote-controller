@@ -17,38 +17,39 @@
     <header class="home-head">
       <p class="eyebrow">TRÌNH CHIẾU TỪ XA</p>
       <h1>Chiếu slide trên laptop, điều khiển bằng điện thoại</h1>
-      <p class="lede">Chọn bộ slide dạng PDF và (tuỳ chọn) file PowerPoint để lấy ghi chú. File chỉ được đọc trên máy này, không tải lên đâu cả.</p>
+      <p class="lede">Kéo thả file PowerPoint (.pptx) hoặc PDF của bộ slide vào trang này. File chỉ được đọc trên máy này, không tải lên đâu cả.</p>
     </header>
 
-    <div id="drop" class="drop" tabindex="0">
+    <label id="drop" class="drop" for="slideInput">
       <p class="drop-title">Kéo thả file vào đây</p>
-      <p class="drop-sub">hoặc chọn từng file bên dưới</p>
-    </div>
+      <p class="drop-sub">hoặc bấm để chọn · .pptx, .pdf (có thể chọn cả hai)</p>
+      <input id="slideInput" type="file" multiple accept=".pptx,.pdf,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain">
+    </label>
 
     <div class="pickers">
-      <label class="picker" for="pdfInput">
-        <span class="picker-k">BẮT BUỘC</span>
-        <b>File PDF của bộ slide</b>
-        <span class="picker-v" id="pdfName">Chưa chọn</span>
-        <input id="pdfInput" type="file" accept="application/pdf,.pdf">
-      </label>
-      <label class="picker" for="notesInput">
-        <span class="picker-k">TUỲ CHỌN</span>
-        <b>Ghi chú: file .pptx hoặc .txt</b>
-        <span class="picker-v" id="notesName">Chưa chọn</span>
-        <input id="notesInput" type="file" accept=".pptx,.txt,.md,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain">
-      </label>
+      <div class="picker" id="slidePick">
+        <span class="picker-k">BỘ SLIDE</span>
+        <b id="slideName">Chưa có file</b>
+        <span class="picker-v" id="slideHow">PowerPoint (.pptx) hoặc PDF</span>
+      </div>
+      <div class="picker" id="notesPick">
+        <span class="picker-k">GHI CHÚ</span>
+        <b id="notesName">Chưa có</b>
+        <span class="picker-v" id="notesHow">Lấy từ file PowerPoint, hoặc file .txt</span>
+      </div>
     </div>
 
     <p id="homeMsg" class="msg" hidden></p>
     <button id="startBtn" class="btn-primary" type="button" disabled>Bắt đầu trình chiếu</button>
+    <button id="clearBtn" class="btn-ghost" type="button" hidden>Chọn lại file</button>
 
     <details class="help">
       <summary>Chuẩn bị file thế nào?</summary>
       <ul>
-        <li><b>PowerPoint:</b> File › Export › PDF, và giữ nguyên file .pptx để lấy ghi chú.</li>
-        <li><b>Google Slides:</b> Tệp › Tải xuống › PDF và Microsoft PowerPoint (.pptx).</li>
-        <li><b>Keynote:</b> File › Export To › PDF và PowerPoint.</li>
+        <li><b>Nhanh nhất:</b> kéo thẳng file .pptx vào. Web tự hiển thị slide và lấy ghi chú. Phông chữ và hiệu ứng có thể lệch đôi chút so với PowerPoint.</li>
+        <li><b>Chính xác nhất:</b> kéo cả file PDF và file .pptx của cùng bộ slide. Slide hiển thị từ PDF, ghi chú lấy từ .pptx.</li>
+        <li><b>Google Slides:</b> Tệp › Tải xuống › Microsoft PowerPoint (.pptx) (và PDF nếu muốn).</li>
+        <li><b>Keynote:</b> File › Export To › PowerPoint (và PDF).</li>
         <li><b>Ghi chú dạng .txt:</b> mỗi slide một đoạn, ngăn cách bằng một dòng chỉ có <code>---</code>.</li>
       </ul>
     </details>
@@ -58,7 +59,8 @@
 
 <!-- ============ MÀN CHIẾU (laptop) ============ -->
 <div id="screen" class="view" hidden>
-  <div id="stage"><canvas id="stageCanvas"></canvas></div>
+  <div id="stage"><canvas id="stageCanvas"></canvas><div id="pptxStage" hidden></div></div>
+  <div id="pptxThumbs" class="offscreen" aria-hidden="true"></div>
   <div id="blank" hidden></div>
   <div id="laser" hidden></div>
 

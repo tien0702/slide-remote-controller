@@ -5,6 +5,16 @@
   const PREFIX = 'tcvn-remote-';
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const THUMB_W = 480;
+  const PPTX_LIB = 'https://cdn.jsdelivr.net/npm/pptx-preview@1.0.7/dist/pptx-preview.umd.js';
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector('script[data-src="' + src + '"]')) { resolve(); return; }
+      const el = document.createElement('script');
+      el.src = src; el.dataset.src = src; el.async = true;
+      el.onload = () => resolve(); el.onerror = () => { el.remove(); reject(new Error('load')); };
+      document.head.appendChild(el);
+    });
+  }
   const $ = id => document.getElementById(id);
   const clamp = (i, n) => Math.max(0, Math.min(n - 1, i | 0));
 
@@ -41,6 +51,44 @@
   };
   const fmtShort = ms => { const s = Math.floor(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 
+  /* Làm sạch HTML slide nhận từ laptop trước khi hiển thị (bỏ script, sự kiện, liên kết javascript:) */
+  function sanitizeHtml(html) {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = html;
+    tpl.content.querySelectorAll('script, iframe, object, embed, link, meta, style, base, form').forEach(n => n.remove());
+    tpl.content.querySelectorAll('*').forEach(el => {
+      Array.from(el.attributes).forEach(a => {
+        const n = a.name.toLowerCase(), v = (a.value || '').trim().toLowerCase();
+        if (n.startsWith('on') || ((n === 'href' || n === 'src' || n === 'xlink:href') && v.startsWith('javascript:'))) el.removeAttribute(a.name);
+      });
+    });
+    return tpl.content;
+  }
+  function fitSnap(host) {
+    const snap = host.querySelector('.snap');
+    if (!snap) return;
+    const w = +snap.dataset.w, h = +snap.dataset.h;
+    const s = Math.min(host.clientWidth / w, host.clientHeight / h) || 0;
+    snap.style.transform = 'translate(' + ((host.clientWidth - w * s) / 2) + 'px,' + ((host.clientHeight - h * s) / 2) + 'px) scale(' + s + ')';
+  }
+  /* Vẽ ảnh xem trước vào một ô: ảnh JPEG (PDF) hoặc HTML (PowerPoint). Trả về true nếu có ảnh. */
+  function paintThumb(el, url, snapData) {
+    el.textContent = '';
+    el.classList.remove('snap-host');
+    el.style.backgroundImage = url ? 'url("' + url + '")' : '';
+    if (url) return true;
+    if (!snapData) return false;
+    const snap = document.createElement('div');
+    snap.className = 'snap';
+    snap.dataset.w = snapData.w; snap.dataset.h = snapData.h;
+    snap.style.width = snapData.w + 'px'; snap.style.height = snapData.h + 'px';
+    snap.appendChild(snapData.frag.cloneNode(true));
+    el.classList.add('snap-host');
+    el.appendChild(snap);
+    fitSnap(el);
+    return true;
+  }
+
   function librariesReady() {
     const missing = [];
     if (!window.pdfjsLib) missing.push('pdf.js');
@@ -58,74 +106,167 @@
 
     initHome() {
       show('home');
-      let pdfFile = null, notesFile = null;
-      const setPdf = f => { pdfFile = f; $('pdfName').textContent = f ? f.name : 'Chưa chọn'; $('startBtn').disabled = !f; };
-      const setNotes = f => { notesFile = f; $('notesName').textContent = f ? f.name : 'Chưa chọn'; };
-      const classify = files => {
-        Array.from(files).forEach(f => {
-          const n = f.name.toLowerCase();
-          if (n.endsWith('.pdf')) setPdf(f);
-          else if (n.endsWith('.pptx') || n.endsWith('.txt') || n.endsWith('.md')) setNotes(f);
-          else toast('Không dùng được file “' + f.name + '”. Hãy chọn .pdf, .pptx hoặc .txt');
-        });
+      const st = { pdf: null, pptx: null, txt: null };
+      const ext = f => (f.name.split('.').pop() || '').toLowerCase();
+      const update = () => {
+        const slide = st.pdf || st.pptx;
+        const notes = st.pdf ? (st.pptx || st.txt) : (st.txt || st.pptx);
+        $('slideName').textContent = slide ? slide.name : 'Chưa có file';
+        $('slidePick').classList.toggle('set', !!slide);
+        $('slideHow').textContent = st.pdf ? 'Hiển thị từ PDF (chính xác nhất)' : st.pptx ? 'Hiển thị trực tiếp từ PowerPoint' : 'PowerPoint (.pptx) hoặc PDF';
+        $('notesName').textContent = notes ? notes.name : 'Chưa có';
+        $('notesPick').classList.toggle('set', !!notes);
+        $('notesHow').textContent = notes ? (ext(notes) === 'pptx' ? 'Ghi chú người thuyết trình trong PowerPoint' : 'Mỗi slide một đoạn, ngăn bằng dòng ---') : 'Lấy từ file PowerPoint, hoặc file .txt';
+        $('startBtn').disabled = !slide;
+        $('clearBtn').hidden = !(st.pdf || st.pptx || st.txt);
+        if (!slide && st.txt) this.msg('Đã nhận file ghi chú. Thả thêm file PowerPoint hoặc PDF của bộ slide để bắt đầu.');
+        else if (st.pptx && !st.pdf) this.msg('Sẵn sàng. Slide sẽ hiển thị trực tiếp từ PowerPoint, phông chữ hoặc hiệu ứng có thể khác đôi chút. Muốn chính xác tuyệt đối, thả thêm file PDF của cùng bộ slide.', 'ok');
+        else if (st.pdf) this.msg('Sẵn sàng. Slide hiển thị từ PDF' + (notes ? ', ghi chú lấy từ “' + notes.name + '”.' : '. Chưa có ghi chú: thả thêm file .pptx nếu muốn xem ghi chú trên điện thoại.'), 'ok');
+        else this.msg('');
       };
-      $('pdfInput').addEventListener('change', e => setPdf(e.target.files[0] || null));
-      $('notesInput').addEventListener('change', e => setNotes(e.target.files[0] || null));
-      const drop = $('drop');
-      ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
-      ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
-      drop.addEventListener('drop', e => classify(e.dataTransfer.files));
-      document.addEventListener('dragover', e => e.preventDefault());
-      document.addEventListener('drop', e => { e.preventDefault(); if (!drop.contains(e.target)) classify(e.dataTransfer.files); });
-      $('startBtn').addEventListener('click', () => this.load(pdfFile, notesFile));
+      const take = files => {
+        const list = Array.from(files || []);
+        let used = 0;
+        list.forEach(f => {
+          const e = ext(f);
+          if (e === 'pdf') { st.pdf = f; used++; }
+          else if (e === 'pptx') { st.pptx = f; used++; }
+          else if (e === 'txt' || e === 'md') { st.txt = f; used++; }
+          else if (['ppt', 'key', 'odp', 'pps', 'ppsx'].includes(e)) toast('Chưa đọc được file .' + e + '. Hãy lưu lại thành .pptx hoặc xuất PDF.', 5000);
+          else toast('Không dùng được file “' + f.name + '”. Hãy chọn .pptx, .pdf hoặc .txt', 4000);
+        });
+        if (used) { const d = $('drop'); d.classList.remove('got'); void d.offsetWidth; d.classList.add('got'); toast('Đã nhận ' + list.filter(f => ['pdf', 'pptx', 'txt', 'md'].includes(ext(f))).map(f => f.name).join(', ')); }
+        update();
+      };
+      $('slideInput').addEventListener('change', e => { take(e.target.files); e.target.value = ''; });
+
+      /* Kéo thả ở bất cứ đâu trên trang */
+      let depth = 0;
+      const hasFiles = e => !!(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files'));
+      document.addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); depth++; document.body.classList.add('dragging'); });
+      document.addEventListener('dragleave', e => { if (!hasFiles(e)) return; depth = Math.max(0, depth - 1); if (!depth) document.body.classList.remove('dragging'); });
+      document.addEventListener('dragover', e => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = $('home').hidden ? 'none' : 'copy'; });
+      document.addEventListener('drop', e => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        depth = 0; document.body.classList.remove('dragging');
+        if (!$('home').hidden) take(e.dataTransfer.files);
+      });
+
+      $('clearBtn').addEventListener('click', () => { st.pdf = st.pptx = st.txt = null; update(); });
+      $('startBtn').addEventListener('click', () => this.load(st));
       const demoBtn = $('demoBtn');
       if (demoBtn) demoBtn.addEventListener('click', () => { location.hash = 'demo'; location.reload(); });
+      update();
     },
 
     msg(text, kind) { const m = $('homeMsg'); m.textContent = text; m.className = 'msg ' + (kind || ''); m.hidden = !text; },
 
-    async load(pdfFile, notesFile) {
+    async readNotes(file) {
+      if (file.name.toLowerCase().endsWith('.pptx')) {
+        const zip = await JSZip.loadAsync(await file.arrayBuffer());
+        return NotesParser.notesFromPptxZip(zip, s => new DOMParser().parseFromString(s, 'application/xml'));
+      }
+      const notes = NotesParser.notesFromText(await file.text());
+      return { notes, hidden: 0, all: notes.map(n => ({ hidden: false, notes: n })) };
+    },
+
+    async load(st) {
       if (document.body.classList.contains('demo')) { toast('Bản xem thử: hãy mở web trên GitHub Pages để chọn file thật.', 4000); return; }
-      const missing = librariesReady();
-      if (missing.length) { this.msg('Không tải được thư viện ' + missing.join(', ') + '. Kiểm tra kết nối mạng rồi tải lại trang.', 'err'); return; }
+      const need = [];
+      if (!window.Peer) need.push('PeerJS');
+      if (st.pdf && !window.pdfjsLib) need.push('pdf.js');
+      if ((st.pptx || st.txt) && !window.JSZip) need.push('JSZip');
+      if (need.length) { this.msg('Không tải được thư viện ' + need.join(', ') + '. Kiểm tra kết nối mạng rồi tải lại trang.', 'err'); return; }
       $('startBtn').disabled = true;
-      this.msg('Đang mở PDF…');
+      let warn = '';
       try {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        const data = new Uint8Array(await pdfFile.arrayBuffer());
-        this.pdf = await pdfjsLib.getDocument({ data }).promise;
+        if (st.pdf) {
+          this.msg('Đang mở PDF…');
+          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          try {
+            this.pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await st.pdf.arrayBuffer()) }).promise;
+          } catch (e) { throw new Error('Không mở được file PDF này. Hãy xuất lại PDF từ phần mềm trình chiếu.'); }
+          this.mode = 'pdf';
+          this.count = this.pdf.numPages;
+          this.title = st.pdf.name.replace(/\.pdf$/i, '');
+          this.notes = new Array(this.count).fill('');
+          const nf = st.pptx || st.txt;
+          if (nf) {
+            this.msg('Đang đọc ghi chú…');
+            try {
+              const r = await this.readNotes(nf);
+              if (r.hidden) warn += 'Đã bỏ qua ' + r.hidden + ' slide ẩn trong PowerPoint. ';
+              if (r.notes.length !== this.count) warn += 'File ghi chú có ' + r.notes.length + ' slide nhưng PDF có ' + this.count + ' trang, ghi chú có thể bị lệch.';
+              for (let i = 0; i < this.count; i++) this.notes[i] = r.notes[i] || '';
+            } catch (e) { warn = 'Không đọc được ghi chú (' + (e.message || 'lỗi file') + '). Vẫn chiếu được slide.'; }
+          }
+        } else {
+          this.msg('Đang mở PowerPoint… (lần đầu có thể mất vài giây)');
+          await this.loadPptx(st.pptx);
+          if (st.txt) {
+            const r = await this.readNotes(st.txt);
+            for (let i = 0; i < this.count; i++) this.notes[i] = r.notes[i] || '';
+          }
+          if (this.pptxHidden) warn += 'Đã bỏ qua ' + this.pptxHidden + ' slide ẩn. ';
+        }
       } catch (e) {
-        this.msg('Không mở được file PDF này. Hãy xuất lại PDF từ phần mềm trình chiếu.', 'err');
+        this.msg(e.message || 'Không mở được file.', 'err');
         $('startBtn').disabled = false;
         return;
-      }
-      this.count = this.pdf.numPages;
-      this.title = pdfFile.name.replace(/\.pdf$/i, '');
-      this.notes = new Array(this.count).fill('');
-      let warn = '';
-      if (notesFile) {
-        try {
-          let list;
-          if (notesFile.name.toLowerCase().endsWith('.pptx')) {
-            this.msg('Đang đọc ghi chú từ PowerPoint…');
-            const zip = await JSZip.loadAsync(notesFile);
-            const parse = s => new DOMParser().parseFromString(s, 'application/xml');
-            const r = await NotesParser.notesFromPptxZip(zip, parse);
-            list = r.notes;
-            if (r.hidden) warn += 'Đã bỏ qua ' + r.hidden + ' slide ẩn trong PowerPoint. ';
-          } else {
-            list = NotesParser.notesFromText(await notesFile.text());
-          }
-          if (list.length !== this.count) warn += 'PowerPoint/ghi chú có ' + list.length + ' slide nhưng PDF có ' + this.count + ' trang: ghi chú có thể bị lệch.';
-          for (let i = 0; i < this.count; i++) this.notes[i] = list[i] || '';
-        } catch (e) {
-          warn = 'Không đọc được ghi chú (' + (e.message || 'lỗi file') + '). Vẫn chiếu được slide.';
-        }
       }
       this.thumbs = new Array(this.count).fill(null);
       this.enterScreen();
       if (warn) toast(warn, 7000);
       this.makeThumbs();
+    },
+
+    /* ---------- chế độ PowerPoint: hiển thị .pptx trực tiếp ---------- */
+    async loadPptx(file) {
+      try { await loadScript(PPTX_LIB); } catch (e) {}
+      if (!window.pptxPreview) throw new Error('Không tải được bộ hiển thị PowerPoint. Kiểm tra mạng, hoặc dùng file PDF.');
+      this.pptxBuf = await file.arrayBuffer();
+      let info;
+      try {
+        info = await NotesParser.notesFromPptxZip(await JSZip.loadAsync(this.pptxBuf.slice(0)), s => new DOMParser().parseFromString(s, 'application/xml'));
+      } catch (e) { throw new Error('File PowerPoint bị lỗi hoặc không phải .pptx. Hãy mở bằng PowerPoint và lưu lại.'); }
+      this.ratio = info.size.cy / info.size.cx;
+      const th = Math.round(THUMB_W * this.ratio);
+      this.thumbPrev = pptxPreview.init($('pptxThumbs'), { width: THUMB_W, height: th, mode: 'slide' });
+      try { await this.thumbPrev.load(this.pptxBuf.slice(0)); }
+      catch (e) { throw new Error('Không hiển thị được file PowerPoint này. Hãy xuất PDF rồi thả cả PDF và .pptx.'); }
+      const total = this.thumbPrev.slideCount;
+      let vis = info.all.map((x, i) => (x.hidden ? -1 : i)).filter(i => i >= 0);
+      if (total !== info.all.length) vis = Array.from({ length: total }, (_, i) => i);
+      if (!vis.length) throw new Error('File PowerPoint không có slide nào để chiếu.');
+      this.vis = vis;
+      this.pptxHidden = total === info.all.length ? info.hidden : 0;
+      this.mode = 'pptx';
+      this.count = vis.length;
+      this.title = file.name.replace(/\.pptx$/i, '');
+      this.notes = vis.map(i => (info.all[i] ? info.all[i].notes : ''));
+      $('stageCanvas').hidden = true;
+      $('pptxStage').hidden = false;
+    },
+
+    async renderPptx(token) {
+      const st = $('stage');
+      const W = st.clientWidth || innerWidth, H = st.clientHeight || innerHeight;
+      const w = Math.floor(Math.min(W, H / this.ratio)), h = Math.floor(w * this.ratio);
+      const key = w + 'x' + h;
+      if (key !== this.pptxKey || !this.stagePrev) {
+        this.pptxKey = key;
+        const box = $('pptxStage');
+        try { if (this.stagePrev) this.stagePrev.destroy(); } catch (e) {}
+        box.innerHTML = '';
+        box.style.width = w + 'px'; box.style.height = h + 'px';
+        const prev = pptxPreview.init(box, { width: w, height: h, mode: 'slide' });
+        this.stagePrev = prev;
+        this.stageReady = prev.load(this.pptxBuf.slice(0));
+      }
+      await this.stageReady;
+      if (token !== this.renderToken) return;
+      try { this.stagePrev.renderSingleSlide(this.vis[this.index]); } catch (e) {}
     },
 
     enterScreen() {
@@ -204,9 +345,10 @@
     },
 
     async render() {
-      if (!this.pdf && !this.demo) return;
+      if (!this.pdf && !this.demo && this.mode !== 'pptx') return;
       const token = ++this.renderToken;
       $('sCount').textContent = (this.index + 1) + ' / ' + this.count;
+      if (this.mode === 'pptx') { this.renderPptx(token); return; }
       try {
         const src = await this.pageCanvas(this.index);
         if (token !== this.renderToken) return;
@@ -223,11 +365,22 @@
     async makeThumbs() {
       for (let i = 0; i < this.count; i++) {
         try {
-          const c = await this.drawPage(i, THUMB_W, THUMB_W);
-          const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.78));
-          const bytes = await blob.arrayBuffer();
-          this.thumbs[i] = bytes;
-          this.broadcast({ t: 'thumb', i, bytes });
+          let m;
+          if (this.mode === 'pptx') {
+            this.thumbPrev.renderSingleSlide(this.vis[i]);
+            await new Promise(r => setTimeout(r, 30));
+            const el = $('pptxThumbs').querySelector('.pptx-preview-slide-wrapper');
+            if (!el) continue;
+            const html = el.outerHTML;
+            if (html.length > 4000000) continue;
+            m = { t: 'thumbHtml', i, html, w: THUMB_W, h: Math.round(THUMB_W * this.ratio) };
+          } else {
+            const c = await this.drawPage(i, THUMB_W, THUMB_W);
+            const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.78));
+            m = { t: 'thumb', i, bytes: await blob.arrayBuffer() };
+          }
+          this.thumbs[i] = m;
+          this.broadcast(m);
         } catch (e) {}
       }
     },
@@ -325,7 +478,7 @@
         this.updateConnUi();
         conn.send({ t: 'hello', count: this.count, title: this.title, notes: this.notes, code: this.code });
         conn.send(this.stateMsg());
-        this.thumbs.forEach((bytes, i) => { if (bytes) conn.send({ t: 'thumb', i, bytes }); });
+        this.thumbs.forEach(m => { if (m) conn.send(m); });
         if (this.qr) { setTimeout(() => this.setQr(false), 1200); }
         toast('Điện thoại đã kết nối');
       });
@@ -358,7 +511,7 @@
      ===================================================================== */
   const Remote = {
     code: '', peer: null, conn: null, count: 0, notes: [], title: '', index: 0, noteMode: 'edit',
-    blank: 'none', qr: false, thumbUrls: [], tab: 'control', retry: null, wakeLock: null,
+    blank: 'none', qr: false, thumbUrls: [], thumbHtml: [], tab: 'control', retry: null, wakeLock: null,
     opts: null, timer: null,
 
     start(code, localConn) {
@@ -424,6 +577,7 @@
         this.notes = Array.isArray(m.notes) ? m.notes.map(String) : [];
         this.thumbUrls.forEach(u => u && URL.revokeObjectURL(u));
         this.thumbUrls = new Array(this.count).fill(null);
+        this.thumbHtml = new Array(this.count).fill(null);
         while (this.timer.slideMs.length < this.count) this.timer.slideMs.push(0);
         this.buildGrid();
         this.renderAll();
@@ -434,6 +588,12 @@
         this.thumbUrls[m.i] = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
         const cell = document.querySelector('#slideGrid [data-i="' + m.i + '"] .g-img');
         if (cell) cell.style.backgroundImage = 'url("' + this.thumbUrls[m.i] + '")';
+        if (m.i === this.index || m.i === this.index + 1) this.renderPreviews();
+      } else if (m.t === 'thumbHtml') {
+        if (m.i < 0 || m.i >= this.count || typeof m.html !== 'string') return;
+        this.thumbHtml[m.i] = { frag: sanitizeHtml(m.html), w: +m.w || 480, h: +m.h || 270 };
+        const cell = document.querySelector('#slideGrid [data-i="' + m.i + '"] .g-img');
+        if (cell) paintThumb(cell, null, this.thumbHtml[m.i]);
         if (m.i === this.index || m.i === this.index + 1) this.renderPreviews();
       } else if (m.t === 'state') {
         this.blank = m.blank || 'none';
@@ -520,6 +680,7 @@
         if (this.conn && this.conn.demo) { toast('Bản xem thử không ngắt kết nối được.'); return; }
         location.href = location.pathname + '?join=';
       };
+      addEventListener('resize', () => { document.querySelectorAll('.snap-host').forEach(fitSnap); });
       document.addEventListener('visibilitychange', () => {
         if (document.hidden) return;
         this.keepAwake();
@@ -548,6 +709,7 @@
       document.querySelectorAll('.panel').forEach(p => { p.hidden = p.dataset.tab !== name; });
       document.querySelectorAll('.tab').forEach(b => { const on = b.dataset.go === name; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
       $('rControls').hidden = name === 'tools' || name === 'timer';
+      if (name === 'slides') { requestAnimationFrame(() => document.querySelectorAll('#slideGrid .snap-host').forEach(fitSnap)); }
       if (name === 'slides') { const cur = document.querySelector('#slideGrid .g.cur'); if (cur) cur.scrollIntoView({ block: 'center' }); }
       if (name === 'notes') this.renderNotes();
       if (name === 'timer') this.renderTimer();
@@ -593,6 +755,7 @@
         const n = document.createElement('span'); n.className = 'g-n'; n.textContent = i + 1;
         const dot = document.createElement('span'); dot.className = 'g-note'; dot.title = 'Có ghi chú'; dot.textContent = 'ghi chú';
         b.append(img, n, dot);
+        if (this.thumbUrls[i] || this.thumbHtml[i]) paintThumb(img, this.thumbUrls[i], this.thumbHtml[i]);
         b.addEventListener('click', () => { this.go(i); this.setTab('control'); });
         g.appendChild(b);
       }
@@ -602,10 +765,9 @@
 
     renderPreviews() {
       const set = (el, i) => {
-        const url = i < this.count ? this.thumbUrls[i] : null;
-        el.style.backgroundImage = url ? 'url("' + url + '")' : '';
-        el.classList.toggle('empty', !url);
-        el.textContent = i >= this.count ? 'Hết' : (url ? '' : 'Đang tải…');
+        if (i >= this.count) { paintThumb(el, null, null); el.textContent = this.count ? 'Hết' : ''; return; }
+        const ok = paintThumb(el, this.thumbUrls[i], this.thumbHtml[i]);
+        if (!ok) el.textContent = 'Đang tải…';
       };
       set($('pvCur'), this.index);
       set($('pvNext'), this.index + 1);
